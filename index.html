@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0b0f17">
+<title>Bone Stand</title>
+<style>
+  :root {
+    --bg: #0b0f17; --panel: #141a26; --line: #26304a; --fg: #f2efe6; --dim: #8b93a7;
+    --brass: #e3b341; --good: #3ddc84; --warn: #ffb020; --bad: #ff5d5d;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    display: flex; flex-direction: column; gap: 10px;
+    -webkit-user-select: none; user-select: none; overflow: hidden;
+  }
+  [hidden] { display: none !important; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; min-height: 0; }
+  .label { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+  #notePanel { flex: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  #note { font-size: min(34vh, 46vw); font-weight: 800; line-height: .95; letter-spacing: -.03em; }
+  #note sub { font-size: .32em; font-weight: 600; color: var(--dim); vertical-align: baseline; margin-left: .08em; letter-spacing: 0; }
+  #tune { font-size: min(6vh, 9vw); font-weight: 700; margin-top: 4px; min-height: 1.2em; }
+  #meter { position: relative; width: 100%; height: 34px; margin-top: 8px; border-radius: 8px;
+    background: linear-gradient(90deg, #3a1c22 0%, #3a2f17 30%, #173a27 42%, #173a27 58%, #3a2f17 70%, #3a1c22 100%); }
+  #meter::after { content: ""; position: absolute; left: 50%; top: -4px; bottom: -4px; width: 2px; background: var(--dim); }
+  #needle { position: absolute; top: -6px; bottom: -6px; width: 10px; margin-left: -5px; left: 50%; border-radius: 5px;
+    background: var(--fg); transition: left .08s linear, background .1s; z-index: 1; }
+  .ends { display: flex; justify-content: space-between; width: 100%; margin-top: 6px; }
+  #row { flex: 2; display: flex; gap: 10px; min-height: 0; }
+  #row .panel { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; min-width: 0; }
+  #chord, #role { font-size: min(13vh, 17vw); font-weight: 800; line-height: 1.05; white-space: nowrap; }
+  #chord { color: var(--brass); }
+  #roleSub, #chordSub { font-size: min(2.8vh, 4vw); color: var(--dim); min-height: 2.5em; margin-top: 2px; }
+  #hint { color: var(--fg); }
+  .ok { color: var(--good); } .mid { color: var(--warn); } .off { color: var(--bad); }
+  .idle { opacity: .28; }
+  #bar { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  button { font: inherit; color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+  button:active { background: var(--line); }
+  #a4 { font-variant-numeric: tabular-nums; color: var(--dim); min-width: 5.5em; text-align: center; display: inline-block; }
+  #start { position: fixed; inset: 0; background: var(--bg); z-index: 5; display: flex; flex-direction: column; gap: 14px;
+    align-items: center; justify-content: center; padding: 24px; text-align: center; }
+  #start h1 { margin: 0; font-size: 34px; color: var(--brass); }
+  #start p { margin: 0; color: var(--dim); max-width: 30em; line-height: 1.4; }
+  #start button { font-size: 19px; font-weight: 700; padding: 16px 20px; width: min(100%, 340px); }
+  #start button.primary { background: var(--brass); color: #1a1300; border-color: var(--brass); }
+  #err { color: var(--bad); }
+</style>
+</head>
+<body>
+
+<div id="start">
+  <h1>Bone Stand</h1>
+  <p>Shows your note, your tuning, the chord the band is playing and where you sit in it. How is your part written?</p>
+  <button class="primary" data-mode="bb">B♭ treble clef part</button>
+  <button data-mode="c">Concert pitch (bass clef)</button>
+  <p id="err"></p>
+</div>
+
+<div class="panel" id="notePanel">
+  <div class="label">Your note</div>
+  <div id="note" class="idle">–</div>
+  <div id="tune">&nbsp;</div>
+  <div id="meter"><div id="needle"></div></div>
+  <div class="ends label"><span>♭ flat</span><span>sharp ♯</span></div>
+</div>
+
+<div id="row">
+  <div class="panel">
+    <div class="label">Chord</div>
+    <div id="chord" class="idle">–</div>
+    <div id="chordSub">&nbsp;</div>
+  </div>
+  <div class="panel">
+    <div class="label">You are the</div>
+    <div id="role" class="idle">–</div>
+    <div id="roleSub">&nbsp;</div>
+  </div>
+</div>
+
+<div id="bar">
+  <button id="modeBtn">Names: B♭</button>
+  <span><button id="aDown">−</button><span id="a4">A = 440</span><button id="aUp">+</button></span>
+</div>
+
+<script id="dsp">
+// ---------- Pure signal processing (no DOM) ----------
+var NAMES = ['C','D♭','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
+var CHORDS = [
+  { s: '',     t: [0,4,7] },    { s: 'm',    t: [0,3,7] },
+  { s: 'dim',  t: [0,3,6] },    { s: 'aug',  t: [0,4,8] },
+  { s: 'sus4', t: [0,5,7] },    { s: '7',    t: [0,4,7,10] },
+  { s: 'maj7', t: [0,4,7,11] }, { s: 'm7',   t: [0,3,7,10] }
+];
+
+// YIN pitch detector. Returns {f, rms} with f = 0 when there is no clear pitch.
+function detectPitch(buf, sr) {
+  var W = 2048, minTau = Math.floor(sr / 700), maxTau = Math.min(Math.ceil(sr / 60), buf.length - W - 1);
+  var i, tau, rms = 0;
+  for (i = 0; i < W; i++) rms += buf[i] * buf[i];
+  rms = Math.sqrt(rms / W);
+  if (rms < 0.008) return { f: 0, rms: rms };
+  var d = new Float32Array(maxTau + 2), run = 0, best = -1;
+  d[0] = 1;
+  for (tau = 1; tau <= maxTau + 1; tau++) {
+    var s = 0;
+    for (i = 0; i < W; i++) { var x = buf[i] - buf[i + tau]; s += x * x; }
+    run += s;
+    d[tau] = run > 0 ? s * tau / run : 1;
+  }
+  for (tau = minTau; tau <= maxTau; tau++) {
+    if (d[tau] < 0.12) {
+      while (tau + 1 <= maxTau && d[tau + 1] < d[tau]) tau++;
+      best = tau; break;
+    }
+  }
+  if (best < 0) return { f: 0, rms: rms };
+  var a = d[best - 1], b = d[best], c = d[best + 1], den = a - 2 * b + c;
+  var shift = den ? 0.5 * (a - c) / den : 0;
+  return { f: sr / (best + shift), rms: rms };
+}
+
+// Pitch-class energy from a dB spectrum. Overtones of the player's own note (f0)
+// are turned down so they do not masquerade as chord notes.
+function chromaFrom(db, sr, fftSize, a4, f0) {
+  var c = new Float32Array(12), hz = sr / fftSize, k;
+  var lo = Math.max(2, Math.floor(60 / hz)), hi = Math.min(db.length - 2, Math.ceil(2100 / hz));
+  var peak = -200;
+  for (k = lo; k <= hi; k++) if (db[k] > peak) peak = db[k];
+  c.peak = peak;
+  if (peak < -75) return c;
+  var floor = peak - 45;
+  for (k = lo; k <= hi; k++) {
+    var b = db[k];
+    if (b < floor || b <= db[k - 1] || b < db[k + 1]) continue;
+    var a = db[k - 1], g = db[k + 1], den = a - 2 * b + g, p = den ? 0.5 * (a - g) / den : 0;
+    var f = (k + p) * hz, midi = 69 + 12 * Math.log2(f / a4), n = Math.round(midi);
+    if (Math.abs(midi - n) > 0.4) continue;
+    var m = Math.pow(10, (b - peak) / 40);           // square-root compressed magnitude
+    if (f0 > 0) {
+      var h = f / f0, hr = Math.round(h);
+      if (hr >= 1 && hr <= 16 && Math.abs(1200 * Math.log2(h / hr)) < 40)
+        m *= (hr & (hr - 1)) === 0 ? 0.5 : 0.12;     // octaves stay (halved); 3rd, 5th, 7th... overtones mostly removed
+    }
+    c[((n % 12) + 12) % 12] += m;
+  }
+  return c;
+}
+
+// Best matching chord for a 12-bin chroma. Returns null when there is not enough harmony to call.
+function matchChord(c) {
+  var mx = 0, norm = 0, cnt = 0, i, r, q;
+  for (i = 0; i < 12; i++) { if (c[i] > mx) mx = c[i]; norm += c[i] * c[i]; }
+  if (mx <= 0) return null;
+  for (i = 0; i < 12; i++) if (c[i] > 0.3 * mx) cnt++;
+  if (cnt < 3) return null;
+  norm = Math.sqrt(norm);
+  var best = null;
+  for (r = 0; r < 12; r++) for (q = 0; q < CHORDS.length; q++) {
+    var t = CHORDS[q].t, s = 0;
+    for (i = 0; i < t.length; i++) s += c[(r + t[i]) % 12];
+    s = s / (Math.sqrt(t.length) * norm);
+    if (t.length > 3) s *= 0.97;
+    s += 0.02 * c[r] / mx;                            // slight preference for a strong root
+    if (!best || s > best.score) best = { root: r, q: q, score: s };
+  }
+  return best.score > 0.72 ? best : null;
+}
+</script>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var ROLE = ['Root','♭9','9th','3rd','3rd','4th','♭5','5th','♯5','6th','7th','7th'];
+  var ROLE_SUB = ['root','flat ninth','ninth','minor third','major third','fourth','flat fifth','perfect fifth','sharp fifth','sixth','flat seventh','major seventh'];
+  var mode = 'bb', a4 = 440;
+  try { mode = localStorage.getItem('mode') || 'bb'; a4 = +localStorage.getItem('a4') || 440; } catch (e) {}
+
+  var ctx, pitchAn, chromaAn, tbuf, fbuf, lock;
+  var chroma = new Float32Array(12), shown = null, cand = null, candN = 0, missN = 0;
+  var midiHist = [], cents = 0, curNote = null, lastPitchT = 0, lastT = 0;
+
+  function save() { try { localStorage.setItem('mode', mode); localStorage.setItem('a4', a4); } catch (e) {} }
+  function pc(n) { return NAMES[(((n + (mode === 'bb' ? 2 : 0)) % 12) + 12) % 12]; }
+  function settingsUI() {
+    $('modeBtn').textContent = mode === 'bb' ? 'Names: B♭ treble' : 'Names: concert';
+    $('a4').textContent = 'A = ' + a4;
+  }
+
+  function wake() {
+    if (navigator.wakeLock && document.visibilityState === 'visible')
+      navigator.wakeLock.request('screen').then(function (l) { lock = l; }).catch(function () {});
+  }
+
+  function start(m) {
+    mode = m; save(); settingsUI();
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      $('err').textContent = 'This browser will not give a web page the microphone. Open the page over https in Chrome or Safari.';
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } })
+      .then(function (stream) {
+        ctx = new (window.AudioContext || window.webkitAudioContext)();
+        ctx.resume();
+        var src = ctx.createMediaStreamSource(stream);
+        pitchAn = ctx.createAnalyser(); pitchAn.fftSize = 4096;
+        chromaAn = ctx.createAnalyser(); chromaAn.fftSize = 16384; chromaAn.smoothingTimeConstant = 0.5;
+        src.connect(pitchAn); src.connect(chromaAn);
+        tbuf = new Float32Array(pitchAn.fftSize);
+        fbuf = new Float32Array(chromaAn.frequencyBinCount);
+        $('start').hidden = true;
+        wake();
+        requestAnimationFrame(tick);
+      })
+      .catch(function (e) {
+        $('err').textContent = 'Microphone not available (' + (e && e.name || 'error') + '). Allow microphone access for this page and try again.';
+      });
+  }
+
+  function tick(t) {
+    requestAnimationFrame(tick);
+    if (t - lastT < 55) return;
+    lastT = t;
+
+    // ---- your note ----
+    pitchAn.getFloatTimeDomainData(tbuf);
+    var p = detectPitch(tbuf, ctx.sampleRate), f0 = 0, myPc = null;
+    if (p.f > 0) {
+      midiHist.push(69 + 12 * Math.log2(p.f / a4));
+      if (midiHist.length > 5) midiHist.shift();
+      var sorted = midiHist.slice().sort(function (x, y) { return x - y; });
+      var midi = sorted[sorted.length >> 1], n = Math.round(midi), c = (midi - n) * 100;
+      if (n !== curNote) { curNote = n; cents = c; } else cents += 0.35 * (c - cents);
+      lastPitchT = t; f0 = p.f;
+    } else if (t - lastPitchT > 350) { midiHist.length = 0; curNote = null; }
+
+    var noteEl = $('note'), tuneEl = $('tune'), needle = $('needle');
+    if (curNote !== null) {
+      myPc = ((curNote % 12) + 12) % 12;
+      var disp = curNote + (mode === 'bb' ? 14 : 0);
+      noteEl.innerHTML = NAMES[((disp % 12) + 12) % 12] + '<sub>' + (Math.floor(disp / 12) - 1) + '</sub>';
+      noteEl.className = '';
+      var ac = Math.abs(cents), r = Math.round(ac), cls = ac <= 8 ? 'ok' : ac <= 20 ? 'mid' : 'off';
+      tuneEl.textContent = ac <= 8 ? 'In tune' : r + '¢ ' + (cents < 0 ? 'FLAT' : 'SHARP');
+      tuneEl.className = cls;
+      needle.style.left = (50 + Math.max(-50, Math.min(50, cents))) + '%';
+      needle.style.background = 'var(--' + (cls === 'ok' ? 'good' : cls === 'mid' ? 'warn' : 'bad') + ')';
+    } else {
+      noteEl.className = 'idle'; tuneEl.innerHTML = '&nbsp;';
+      needle.style.left = '50%'; needle.style.background = 'var(--dim)';
+    }
+
+    // ---- chord around you ----
+    chromaAn.getFloatFrequencyData(fbuf);
+    var now = chromaFrom(fbuf, ctx.sampleRate, chromaAn.fftSize, a4, f0), i;
+    var loud = now.peak > -68;
+    for (i = 0; i < 12; i++) chroma[i] += 0.3 * ((loud ? now[i] : 0) - chroma[i]);
+    var m = loud ? matchChord(chroma) : null;
+    if (m) {
+      missN = 0;
+      if (shown && m.root === shown.root && m.q === shown.q) { cand = null; candN = 0; }
+      else if (cand && m.root === cand.root && m.q === cand.q) { if (++candN >= 3) { shown = m; cand = null; candN = 0; } }
+      else { cand = m; candN = 1; if (!shown) candN = 2; }
+    } else if (++missN > 8) { shown = null; cand = null; }
+
+    var chordEl = $('chord'), roleEl = $('role');
+    if (shown) {
+      var ch = CHORDS[shown.q];
+      chordEl.textContent = pc(shown.root) + ch.s; chordEl.className = '';
+      $('chordSub').textContent = ch.t.map(function (x) { return pc(shown.root + x); }).join('  ');
+      if (myPc !== null) {
+        var iv = (myPc - shown.root + 12) % 12, inChord = ch.t.indexOf(iv) >= 0;
+        roleEl.textContent = ROLE[iv]; roleEl.className = inChord ? '' : 'mid';
+        var hint = '';
+        if (iv === 4) hint = 'sits best ~14¢ low';
+        else if (iv === 3) hint = 'sits best ~16¢ high';
+        else if (iv === 10 && ch.s === '7') hint = 'sits best well low';
+        else if (iv === 7) hint = 'keep it dead centre';
+        $('roleSub').innerHTML = (inChord ? ROLE_SUB[iv] : ROLE_SUB[iv] + ' · not a chord note') +
+          (inChord && hint ? '<br><span id="hint">' + hint + '</span>' : '');
+      } else { roleEl.textContent = '–'; roleEl.className = 'idle'; $('roleSub').innerHTML = '&nbsp;'; }
+    } else {
+      chordEl.textContent = '–'; chordEl.className = 'idle'; $('chordSub').innerHTML = '&nbsp;';
+      roleEl.textContent = '–'; roleEl.className = 'idle'; $('roleSub').innerHTML = '&nbsp;';
+    }
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('#start button'), function (b) {
+    b.addEventListener('click', function () { start(b.dataset.mode); });
+  });
+  $('modeBtn').addEventListener('click', function () { mode = mode === 'bb' ? 'c' : 'bb'; save(); settingsUI(); });
+  $('aDown').addEventListener('click', function () { a4 = Math.max(430, a4 - 1); save(); settingsUI(); });
+  $('aUp').addEventListener('click', function () { a4 = Math.min(450, a4 + 1); save(); settingsUI(); });
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') { wake(); if (ctx) ctx.resume(); }
+  });
+  settingsUI();
+})();
+</script>
+</body>
+</html>
